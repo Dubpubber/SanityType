@@ -4,6 +4,7 @@ import com.badlogic.gdx.Application;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -23,6 +24,8 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextField;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Timer;
+
+import java.math.BigInteger;
 
 public class SanityType extends ApplicationAdapter {
 
@@ -46,6 +49,9 @@ public class SanityType extends ApplicationAdapter {
     private Timer.Task spawnerTask;
     private float speed = 2;
 
+    private BigInteger score = BigInteger.valueOf(0);
+    private double multipler = 1.0;
+
     @Override
 	public void create () {
 		Gdx.app.setLogLevel(Application.LOG_DEBUG);
@@ -63,11 +69,10 @@ public class SanityType extends ApplicationAdapter {
 		String[] FL_verbs = Gdx.files.internal("4L_verbs.txt").readString().split(",");
 		fourLetter_verbs.addAll(FL_verbs);
 
-        spawnerTask = new Timer().scheduleTask(new Timer.Task() {
+        spawnerTask = Timer.schedule(new Timer.Task() {
             @Override
             public void run() {
-                // add one, make one fall.
-                words.addActor(new WordSprite(fourLetter_verbs.random()));
+                words.addActor(new WordSprite());
             }
         }, 0, speed);
 
@@ -85,7 +90,7 @@ public class SanityType extends ApplicationAdapter {
 	public void render () {
 		Gdx.gl.glClearColor(0, 0, 0, 1);
 		Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-        Gdx.graphics.setTitle(Gdx.graphics.getFramesPerSecond() + "");
+        Gdx.graphics.setTitle(Gdx.graphics.getFramesPerSecond() + " " + Gdx.input.getX() + " , " + Gdx.input.getY());
 
         words.act();
         words.draw();
@@ -94,13 +99,17 @@ public class SanityType extends ApplicationAdapter {
         input.draw();
 
         batch.begin();
+        font.draw(batch, "Score: " + score.intValue(), 5, 585);
+        font.draw(batch, "Multiplier: " + multipler, 5, 565);
         if(words.getActors().size > 0)
             focus = (WordSprite) words.getActors().first();
-        // font.draw(batch, focus.text, (Gdx.graphics.getWidth() - focus.text.width) / 2, 75);
+        else
+            focus = addWordSprite();
         batch.end();
 
         if(focus != null) {
             renderer.begin(ShapeRenderer.ShapeType.Line);
+            renderer.setColor(Color.ORANGE);
             renderer.line(
                     0,
                     focus.body.getPosition().y - (focus.text.height / 2),
@@ -116,30 +125,50 @@ public class SanityType extends ApplicationAdapter {
             renderer.end();
         }
 
-        if(Gdx.input.isKeyPressed(Input.Keys.ENTER) && field.getText().length() > 0)
-            query();
+        if(Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)) {
+            int length = field.getText().length();
+            if(length > 0 && length <= focus.getName().length()) {
+                correctChar(length - 1);
+                if(checkFocus(length - 1)) {
+                    focus.destroy();
+                    addScore(1000);
+                    multipler += 0.5;
+                }
+            }
+        }
 
         world.step(1/60f, 6, 2);
 
 	}
 
-    public void query() {
-        if(focus.getName().equalsIgnoreCase(field.getText().toLowerCase()))
-            focus.remove();
-        field.setText("");
+    public void correctChar(int index) {
+        char[] f_chr = focus.getName().toCharArray();
+        char[] field_chr = field.getText().toCharArray();
+        if(f_chr[index] != field_chr[index]) {
+            removeScore(100);
+            multipler = 1;
+        }
     }
 
-    public void speedUp(float speed) {
-        this.speed -= speed;
-        spawnerTask.cancel();
+    public boolean checkFocus(int index) {
+        char[] f_chr = focus.getName().toCharArray();
+        char[] field_chr = field.getText().toCharArray();
+        return (f_chr[index] == field_chr[index]) && (f_chr.length == field_chr.length);
+    }
 
-        spawnerTask = new Timer().scheduleTask(new Timer.Task() {
-            @Override
-            public void run() {
-                // add one, make one fall.
-                words.addActor(new WordSprite(fourLetter_verbs.random()));
-            }
-        }, 0, speed);
+    public WordSprite addWordSprite() {
+        WordSprite ws = new WordSprite();
+        words.addActor(ws);
+        return ws;
+    }
+
+    public void addScore(int value) {
+        double result = (value * multipler);
+        score = score.add(BigInteger.valueOf((long) result));
+    }
+
+    public void removeScore(int value) {
+        score = score.subtract(BigInteger.valueOf(value));
     }
 
 	public void log(String message) {
@@ -152,9 +181,9 @@ public class SanityType extends ApplicationAdapter {
 
 		private GlyphLayout text;
 
-		public WordSprite(String str) {
-			text = new GlyphLayout(font, str.toUpperCase());
-            setName(str);
+		public WordSprite() {
+            setName(fourLetter_verbs.random());
+			text = new GlyphLayout(font, getName().toUpperCase());
 
             BodyDef bodyDef = new BodyDef();
             bodyDef.position.set(
@@ -177,10 +206,15 @@ public class SanityType extends ApplicationAdapter {
         public void draw(Batch batch, float parentAlpha) {
             font.draw(batch, text, body.getPosition().x, body.getPosition().y);
 
-            if(body.getPosition().y < 50) {
-                remove();
+            if(body.getPosition().y < 45) {
+                destroy();
             }
-
         }
-	}
+
+        public void destroy() {
+            field.setText("");
+            world.destroyBody(body);
+            remove();
+        }
+    }
 }
