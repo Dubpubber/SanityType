@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.Body;
@@ -35,6 +36,8 @@ public class SanityType extends ApplicationAdapter {
     private Stage words;
     private Stage input;
 
+    private ShapeRenderer renderer;
+
     private World world;
 
     private WordSprite focus;
@@ -51,6 +54,8 @@ public class SanityType extends ApplicationAdapter {
 
         words = new Stage();
         input = new Stage();
+
+        renderer = new ShapeRenderer();
 
         world = new World(new Vector2(0, 0), true);
 
@@ -94,6 +99,23 @@ public class SanityType extends ApplicationAdapter {
         // font.draw(batch, focus.text, (Gdx.graphics.getWidth() - focus.text.width) / 2, 75);
         batch.end();
 
+        if(focus != null) {
+            renderer.begin(ShapeRenderer.ShapeType.Line);
+            renderer.line(
+                    0,
+                    focus.body.getPosition().y - (focus.text.height / 2),
+                    focus.body.getPosition().x - 5,
+                    focus.body.getPosition().y - (focus.text.height / 2)
+            );
+            renderer.line(
+                    focus.body.getPosition().x + (focus.text.width + 5),
+                    focus.body.getPosition().y - (focus.text.height / 2),
+                    Gdx.graphics.getWidth(),
+                    focus.body.getPosition().y - (focus.text.height / 2)
+            );
+            renderer.end();
+        }
+
         if(Gdx.input.isKeyPressed(Input.Keys.ENTER) && field.getText().length() > 0)
             query();
 
@@ -105,7 +127,6 @@ public class SanityType extends ApplicationAdapter {
         if(focus.getName().equalsIgnoreCase(field.getText().toLowerCase()))
             focus.remove();
         field.setText("");
-        speedUp(1);
     }
 
     public void speedUp(float speed) {
@@ -118,7 +139,7 @@ public class SanityType extends ApplicationAdapter {
                 // add one, make one fall.
                 words.addActor(new WordSprite(fourLetter_verbs.random()));
             }
-        }, speed, speed);
+        }, 0, speed);
     }
 
 	public void log(String message) {
@@ -132,7 +153,7 @@ public class SanityType extends ApplicationAdapter {
 		private GlyphLayout text;
 
 		public WordSprite(String str) {
-			text = new GlyphLayout(font, str);
+			text = new GlyphLayout(font, str.toUpperCase());
             setName(str);
 
             BodyDef bodyDef = new BodyDef();
@@ -156,7 +177,7 @@ public class SanityType extends ApplicationAdapter {
         public void draw(Batch batch, float parentAlpha) {
             font.draw(batch, text, body.getPosition().x, body.getPosition().y);
 
-            if(body.getPosition().y < 45) {
+            if(body.getPosition().y < 50) {
                 remove();
             }
 
