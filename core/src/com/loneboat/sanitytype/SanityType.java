@@ -1,7 +1,7 @@
 package com.loneboat.sanitytype;
 
 import com.badlogic.gdx.Application;
-import com.badlogic.gdx.ApplicationAdapter;
+import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
@@ -18,18 +18,23 @@ import com.badlogic.gdx.physics.box2d.BodyDef;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Timer;
 import com.badlogic.gdx.utils.XmlReader;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
 
 import java.io.IOException;
 import java.math.BigInteger;
 
-public class SanityType extends ApplicationAdapter {
+public class SanityType extends Game {
 
     private static final float PPE = 100;
 
@@ -44,6 +49,7 @@ public class SanityType extends ApplicationAdapter {
 
     private Stage words;
     private Stage input;
+    private Stage pauseStage;
 
     private ShapeRenderer renderer;
 
@@ -58,14 +64,23 @@ public class SanityType extends ApplicationAdapter {
     private BigInteger score = BigInteger.valueOf(250001);
     private double multiplier = 1.0;
 
+    private GameState gs;
+    public enum GameState {
+        RUN, PAUSE, RESUME
+    }
+
     @Override
 	public void create () {
 		Gdx.app.setLogLevel(Application.LOG_DEBUG);
 		font = new BitmapFont();
         batch = new SpriteBatch();
+        gs = GameState.RUN;
 
         words = new Stage();
         input = new Stage();
+
+        pauseStage = new Stage(new ExtendViewport(Gdx.graphics.getWidth(), Gdx.graphics.getHeight()));
+        createPauseUI();
 
         renderer = new ShapeRenderer();
 
@@ -115,88 +130,142 @@ public class SanityType extends ApplicationAdapter {
 
         setLevel(0);
         Gdx.input.setInputProcessor(input);
-
 	}
+
+    public void createPauseUI() {
+        Skin skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
+
+        Label pauseLabel = new Label("Game is Paused.", skin);
+        pauseLabel.setPosition(Gdx.graphics.getWidth() / 2, Gdx.graphics.getHeight() / 2, Align.center);
+        pauseStage.addActor(pauseLabel);
+
+        TextButton exitButton = new TextButton("I've lost my sanity", skin);
+        exitButton.setPosition(Gdx.graphics.getWidth() / 2, pauseLabel.getY() - exitButton.getHeight(), Align.center);
+        pauseStage.addActor(exitButton);
+
+        exitButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Gdx.app.exit();
+            }
+        });
+
+    }
 
 	@Override
 	public void render () {
-        Gdx.gl.glClearColor(0, 0, 0, 1);
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-        if (active == null) {
-            Gdx.graphics.setTitle(Gdx.graphics.getFramesPerSecond() + " " + Gdx.input.getX() + " , " + Gdx.input.getY() + " (!Loading Level!)");
-            return;
-        }
-        Gdx.graphics.setTitle(Gdx.graphics.getFramesPerSecond() + " " + Gdx.input.getX() + " , " + Gdx.input.getY());
+        switch(gs) {
+            case RUN:
+                Gdx.gl.glClearColor(0, 0, 0, 1);
+                Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+                if (active == null) {
+                    Gdx.graphics.setTitle(Gdx.graphics.getFramesPerSecond() + " " + Gdx.input.getX() + " , " + Gdx.input.getY() + " (!Loading Level!)");
+                    return;
+                }
+                Gdx.graphics.setTitle(Gdx.graphics.getFramesPerSecond() + " " + Gdx.input.getX() + " , " + Gdx.input.getY());
 
-        // Add words based on timer.
-        timer += Gdx.graphics.getDeltaTime();
-        if (timer >= speed) {
-            addWordSprite();
-            timer = 0;
-        }
+                // Add words based on timer.
+                timer += Gdx.graphics.getDeltaTime();
+                if (timer >= speed) {
+                    addWordSprite();
+                    timer = 0;
+                }
 
-        if (active.isPassable())
-            advanceLevel();
+                if (active.isPassable())
+                    advanceLevel();
 
-        words.act();
-        words.draw();
+                words.act();
+                words.draw();
 
-        input.act();
-        input.draw();
+                input.act();
+                input.draw();
 
-        if (active != null) {
+                if (active != null) {
+                    if (words.getActors().size > 0)
+                        focus = (WordSprite) words.getActors().first();
+                    else
+                        focus = addWordSprite();
 
-            batch.begin();
-            font.draw(batch, "Score: " + score.intValue(), 5, 585);
-            font.draw(batch, "Multiplier: " + multiplier, 5, 565);
-            font.draw(batch, "Speed: " + speed, 5, 545);
-            font.draw(batch, "Level: " + active.getQuickCode(), 5, 525);
-            batch.end();
+                    batch.begin();
+                    font.draw(batch, "Score: " + score.intValue(), 5, 585);
+                    font.draw(batch, "Multiplier: " + multiplier, 5, 565);
+                    font.draw(batch, "Speed: " + speed, 5, 545);
+                    font.draw(batch, "Level: " + active.getQuickCode(), 5, 525);
+                    batch.end();
 
-            if (words.getActors().size > 0)
-                focus = (WordSprite) words.getActors().first();
-            else
-                focus = addWordSprite();
+                    if(focus != null) {
+                        renderer.begin(ShapeRenderer.ShapeType.Filled);
+                        renderer.setColor(getColorFromHeight(focus));
+                        renderer.rectLine(
+                                0,
+                                focus.body.getPosition().y - (focus.text.height / 2),
+                                focus.body.getPosition().x - 5,
+                                focus.body.getPosition().y - (focus.text.height / 2),
+                                focus.text.height
+                        );
+                        renderer.rectLine(
+                                focus.body.getPosition().x + (focus.text.width + 5),
+                                focus.body.getPosition().y - (focus.text.height / 2),
+                                Gdx.graphics.getWidth(),
+                                focus.body.getPosition().y - (focus.text.height / 2),
+                                focus.text.height
+                        );
+                        renderer.end();
+                    }
 
-            if(focus != null) {
-                renderer.begin(ShapeRenderer.ShapeType.Line);
-                renderer.setColor(Color.ORANGE);
-                renderer.line(
-                        0,
-                        focus.body.getPosition().y - (focus.text.height / 2),
-                        focus.body.getPosition().x - 5,
-                        focus.body.getPosition().y - (focus.text.height / 2)
-                );
-                renderer.line(
-                        focus.body.getPosition().x + (focus.text.width + 5),
-                        focus.body.getPosition().y - (focus.text.height / 2),
-                        Gdx.graphics.getWidth(),
-                        focus.body.getPosition().y - (focus.text.height / 2)
-                );
-                renderer.end();
-            }
+                    if(Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)) {
+                        int length = field.getText().length();
+                        if(length > 0 && length <= focus.getName().length()) {
+                            correctChar(length - 1);
+                            if(checkFocus(length - 1)) {
+                                if(focus.getName().equalsIgnoreCase(field.getText())) {
+                                    focus.destroy();
+                                    addScore(250);
+                                    decSpeed(0.025f);
+                                    active.clampSpeed();
+                                    multiplier += 0.5;
+                                }
+                            }
+                        }
+                    }
 
-            if(Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)) {
-                int length = field.getText().length();
-                if(length > 0 && length <= focus.getName().length()) {
-                    correctChar(length - 1);
-                    if(checkFocus(length - 1)) {
-                        focus.destroy();
-                        addScore(250);
-                        decSpeed(0.025f);
-                        active.clampSpeed();
-                        multiplier += 0.5;
+                    if(Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                        setState(GameState.PAUSE);
+                        Gdx.input.setInputProcessor(pauseStage);
                     }
                 }
-            }
 
-            if(Gdx.input.isKeyPressed(Input.Keys.ESCAPE))
-                Gdx.app.exit();
+                world.step(1/60f, 6, 2);
+                break;
+            case PAUSE:
+                Gdx.gl.glClearColor(0, 0, 0, 1);
+                Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+                Gdx.graphics.setTitle(Gdx.graphics.getFramesPerSecond() + " Game Paused.");
+
+                batch.begin();
+                font.draw(batch, "Current Score: " + score.intValue(), 5, 585);
+                font.draw(batch, "Current Multiplier: " + multiplier, 5, 565);
+                font.draw(batch, "Current Speed: " + speed, 5, 545);
+                font.draw(batch, "Current Level: " + active.getQuickCode(), 5, 525);
+                batch.end();
+
+                pauseStage.act(Gdx.graphics.getDeltaTime());
+                pauseStage.draw();
+
+                if(Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                    setState(GameState.RUN);
+                    Gdx.input.setInputProcessor(input);
+                }
+                break;
+            case RESUME:
+                break;
         }
-
-        world.step(1/60f, 6, 2);
-
 	}
+
+    @Override
+    public void resize(int width, int height) {
+        pauseStage.getViewport().update(width, height);
+    }
 
     public void correctChar(int index) {
         char[] f_chr = focus.getName().toCharArray();
@@ -263,6 +332,26 @@ public class SanityType extends ApplicationAdapter {
 		Gdx.app.debug("DebugOut", message);
 	}
 
+    public void setState(GameState state) {
+        this.gs = state;
+    }
+
+    public Color getColorFromHeight(WordSprite ws) {
+        float height = ws.body.getPosition().y;
+        float windowHeight = Gdx.graphics.getHeight();
+
+        if(height > (windowHeight - 100))
+            return Color.GREEN;
+        else if(height < (windowHeight - 100) && height > (windowHeight - 200))
+            return Color.BLUE;
+        else if(height < (windowHeight - 200) && height > (windowHeight - 300))
+            return Color.YELLOW;
+        else if(height < (windowHeight - 300) && height > (windowHeight - 400))
+            return Color.ORANGE;
+        else
+            return Color.RED;
+    }
+
 	public class WordSprite extends Actor {
 
         private Body body;
@@ -318,7 +407,7 @@ public class SanityType extends ApplicationAdapter {
         public void draw(Batch batch, float parentAlpha) {
             font.draw(batch, text, body.getPosition().x, body.getPosition().y);
 
-            if(body.getPosition().y < 45) {
+            if(body.getPosition().y < (field.getHeight() + text.height)) {
                 if(getName().equalsIgnoreCase(active.getCode())) {
                     destroy();
                 } else {
