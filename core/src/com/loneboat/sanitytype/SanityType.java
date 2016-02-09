@@ -101,6 +101,7 @@ public class SanityType extends ApplicationAdapter {
         batch.begin();
         font.draw(batch, "Score: " + score.intValue(), 5, 585);
         font.draw(batch, "Multiplier: " + multipler, 5, 565);
+        font.draw(batch, "Speed: " + speed, 5, 545);
         if(words.getActors().size > 0)
             focus = (WordSprite) words.getActors().first();
         else
@@ -131,7 +132,7 @@ public class SanityType extends ApplicationAdapter {
                 correctChar(length - 1);
                 if(checkFocus(length - 1)) {
                     focus.destroy();
-                    addScore(1000);
+                    addScore(250);
                     multipler += 0.5;
                 }
             }
@@ -147,6 +148,7 @@ public class SanityType extends ApplicationAdapter {
         if(f_chr[index] != field_chr[index]) {
             removeScore(100);
             multipler = 1;
+            speedUp(0.1f);
         }
     }
 
@@ -169,6 +171,17 @@ public class SanityType extends ApplicationAdapter {
 
     public void removeScore(int value) {
         score = score.subtract(BigInteger.valueOf(value));
+    }
+
+    public void speedUp(float speed) {
+        this.speed -= speed;
+        spawnerTask.cancel();
+        spawnerTask = Timer.schedule(new Timer.Task() {
+            @Override
+            public void run() {
+                addWordSprite();
+            }
+        }, 0, speed);
     }
 
 	public void log(String message) {
@@ -207,6 +220,7 @@ public class SanityType extends ApplicationAdapter {
             font.draw(batch, text, body.getPosition().x, body.getPosition().y);
 
             if(body.getPosition().y < 45) {
+                removeScore(500);
                 destroy();
             }
         }
