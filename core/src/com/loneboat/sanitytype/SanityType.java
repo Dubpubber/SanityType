@@ -23,6 +23,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.Timer;
 import com.badlogic.gdx.utils.XmlReader;
 
 import java.io.IOException;
@@ -54,7 +55,7 @@ public class SanityType extends ApplicationAdapter {
     private float timer = 0;
     private float speed = 2;
 
-    private BigInteger score = BigInteger.valueOf(0);
+    private BigInteger score = BigInteger.valueOf(250001);
     private double multiplier = 1.0;
 
     @Override
@@ -88,7 +89,6 @@ public class SanityType extends ApplicationAdapter {
             Array<XmlReader.Element> stages = root.getChildrenByName("stage");
             int x = 1;
             for(XmlReader.Element child : stages) {
-                log(child.getName());
                 Level level = new Level();
                 level.setCode(child.get("level_code"));
                 level.setDifficulty(child.getInt("difficulty"));
@@ -105,6 +105,14 @@ public class SanityType extends ApplicationAdapter {
             e.printStackTrace();
         }
 
+        Timer.schedule(new Timer.Task() {
+            @Override
+            public void run() {
+               if(active != null)
+                   active.spawnLevelCode();
+            }
+        }, 0, 1);
+
         setLevel(0);
         Gdx.input.setInputProcessor(input);
 
@@ -112,9 +120,9 @@ public class SanityType extends ApplicationAdapter {
 
 	@Override
 	public void render () {
-		Gdx.gl.glClearColor(0, 0, 0, 1);
-		Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-        if(active == null) {
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        if (active == null) {
             Gdx.graphics.setTitle(Gdx.graphics.getFramesPerSecond() + " " + Gdx.input.getX() + " , " + Gdx.input.getY() + " (!Loading Level!)");
             return;
         }
@@ -122,12 +130,12 @@ public class SanityType extends ApplicationAdapter {
 
         // Add words based on timer.
         timer += Gdx.graphics.getDeltaTime();
-        if(timer >= speed) {
+        if (timer >= speed) {
             addWordSprite();
             timer = 0;
         }
 
-        if(active.isPassable())
+        if (active.isPassable())
             advanceLevel();
 
         words.act();
@@ -136,49 +144,55 @@ public class SanityType extends ApplicationAdapter {
         input.act();
         input.draw();
 
-        batch.begin();
-        font.draw(batch, "Score: " + score.intValue(), 5, 585);
-        font.draw(batch, "Multiplier: " + multiplier, 5, 565);
-        font.draw(batch, "Speed: " + speed, 5, 545);
-        font.draw(batch, "Level: " + active.getQuickCode(), 5, 525);
-        if(words.getActors().size > 0)
-            focus = (WordSprite) words.getActors().first();
-        else
-            focus = addWordSprite();
-        batch.end();
+        if (active != null) {
 
-        if(focus != null) {
-            renderer.begin(ShapeRenderer.ShapeType.Line);
-            renderer.setColor(Color.ORANGE);
-            renderer.line(
-                    0,
-                    focus.body.getPosition().y - (focus.text.height / 2),
-                    focus.body.getPosition().x - 5,
-                    focus.body.getPosition().y - (focus.text.height / 2)
-            );
-            renderer.line(
-                    focus.body.getPosition().x + (focus.text.width + 5),
-                    focus.body.getPosition().y - (focus.text.height / 2),
-                    Gdx.graphics.getWidth(),
-                    focus.body.getPosition().y - (focus.text.height / 2)
-            );
-            renderer.end();
-        }
+            batch.begin();
+            font.draw(batch, "Score: " + score.intValue(), 5, 585);
+            font.draw(batch, "Multiplier: " + multiplier, 5, 565);
+            font.draw(batch, "Speed: " + speed, 5, 545);
+            font.draw(batch, "Level: " + active.getQuickCode(), 5, 525);
+            batch.end();
 
-        if(Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)) {
-            int length = field.getText().length();
-            if(length > 0 && length <= focus.getName().length()) {
-                correctChar(length - 1);
-                if(checkFocus(length - 1)) {
-                    focus.destroy();
-                    addScore(250);
-                    multiplier += 0.5;
+            if (words.getActors().size > 0)
+                focus = (WordSprite) words.getActors().first();
+            else
+                focus = addWordSprite();
+
+            if(focus != null) {
+                renderer.begin(ShapeRenderer.ShapeType.Line);
+                renderer.setColor(Color.ORANGE);
+                renderer.line(
+                        0,
+                        focus.body.getPosition().y - (focus.text.height / 2),
+                        focus.body.getPosition().x - 5,
+                        focus.body.getPosition().y - (focus.text.height / 2)
+                );
+                renderer.line(
+                        focus.body.getPosition().x + (focus.text.width + 5),
+                        focus.body.getPosition().y - (focus.text.height / 2),
+                        Gdx.graphics.getWidth(),
+                        focus.body.getPosition().y - (focus.text.height / 2)
+                );
+                renderer.end();
+            }
+
+            if(Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)) {
+                int length = field.getText().length();
+                if(length > 0 && length <= focus.getName().length()) {
+                    correctChar(length - 1);
+                    if(checkFocus(length - 1)) {
+                        focus.destroy();
+                        addScore(250);
+                        decSpeed(0.025f);
+                        active.clampSpeed();
+                        multiplier += 0.5;
+                    }
                 }
             }
-        }
 
-        if(Gdx.input.isKeyPressed(Input.Keys.ESCAPE))
-            Gdx.app.exit();
+            if(Gdx.input.isKeyPressed(Input.Keys.ESCAPE))
+                Gdx.app.exit();
+        }
 
         world.step(1/60f, 6, 2);
 
@@ -190,6 +204,7 @@ public class SanityType extends ApplicationAdapter {
         if(f_chr[index] != field_chr[index]) {
             removeScore(100);
             multiplier = 1;
+            active.clampSpeed();
             incSpeed(0.05f);
         }
     }
@@ -219,6 +234,10 @@ public class SanityType extends ApplicationAdapter {
         this.speed -= speed;
     }
 
+    public void decSpeed(float speed) {
+        this.speed += speed;
+    }
+
     public Level getLevel(String id) {
         for(Level level : levels)
             if(level.getCode().equals(id))
@@ -227,13 +246,17 @@ public class SanityType extends ApplicationAdapter {
     }
 
     public void setLevel(int index) {
-        if(index < levels.size)
+        if(index < levels.size) {
             this.active = levels.get(index);
+            level_index = index;
+        }
     }
 
     public void advanceLevel() {
-        if(level_index < levels.size)
+        if(level_index < levels.size) {
             this.active = levels.get(level_index + 1);
+            level_index++;
+        }
     }
 
 	public void log(String message) {
@@ -270,13 +293,38 @@ public class SanityType extends ApplicationAdapter {
                 body.setLinearVelocity(0, -(active.getWordFallSpeed()) * PPE);
 		}
 
+        public WordSprite(String str, float speed) {
+            setName(str);
+            text = new GlyphLayout(font, getName().toUpperCase());
+
+            BodyDef bodyDef = new BodyDef();
+            bodyDef.position.set(
+                    MathUtils.random(0, Gdx.graphics.getWidth() - text.width),
+                    Gdx.graphics.getHeight() + 25
+            );
+            bodyDef.type = BodyDef.BodyType.DynamicBody;
+
+            body = world.createBody(bodyDef);
+
+            PolygonShape textbox = new PolygonShape();
+            textbox.setAsBox(text.width, text.height);
+            body.createFixture(textbox, 0.0f);
+            textbox.dispose();
+
+            body.setLinearVelocity(0, -speed * PPE);
+        }
+
         @Override
         public void draw(Batch batch, float parentAlpha) {
             font.draw(batch, text, body.getPosition().x, body.getPosition().y);
 
             if(body.getPosition().y < 45) {
-                removeScore(500);
-                destroy();
+                if(getName().equalsIgnoreCase(active.getCode())) {
+                    destroy();
+                } else {
+                    removeScore(500);
+                    destroy();
+                }
             }
         }
 
@@ -296,6 +344,7 @@ public class SanityType extends ApplicationAdapter {
         private boolean hasBoss;
         private BigInteger passingScore;
         private float wordFallSpeed;
+        private boolean levelCodeSpawned = false;
 
         public String getQuickCode() {
             return quickCode;
@@ -310,7 +359,7 @@ public class SanityType extends ApplicationAdapter {
         }
 
         public void setCode(String code) {
-            this.code = code;
+            this.code = code.toLowerCase();
         }
 
         public int getDifficulty() {
@@ -364,6 +413,19 @@ public class SanityType extends ApplicationAdapter {
         public boolean isPassable() {
             return score.intValue() > passingScore.intValue();
         }
+
+        public void clampSpeed() {
+            speed = MathUtils.clamp(speed, maxSpeed, minSpeed);
+        }
+
+        public void spawnLevelCode() {
+            if(score.intValue() >= (getPassingScore().intValue() / 2))
+                if(MathUtils.randomBoolean(50f) && !levelCodeSpawned) {
+                    words.addActor(new WordSprite(getCode(), 1.5f));
+                    levelCodeSpawned = true;
+                }
+        }
+
     }
 
 }
