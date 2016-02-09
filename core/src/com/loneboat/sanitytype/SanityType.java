@@ -23,8 +23,9 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
-import com.badlogic.gdx.utils.Timer;
+import com.badlogic.gdx.utils.XmlReader;
 
+import java.io.IOException;
 import java.math.BigInteger;
 
 public class SanityType extends ApplicationAdapter {
@@ -36,6 +37,10 @@ public class SanityType extends ApplicationAdapter {
 
 	private Array<String> fourLetter_verbs;
 
+    private int level_index;
+    private Level active;
+    private Array<Level> levels;
+
     private Stage words;
     private Stage input;
 
@@ -46,11 +51,11 @@ public class SanityType extends ApplicationAdapter {
     private WordSprite focus;
     private TextField field;
 
-    private Timer.Task spawnerTask;
+    private float timer = 0;
     private float speed = 2;
 
     private BigInteger score = BigInteger.valueOf(0);
-    private double multipler = 1.0;
+    private double multiplier = 1.0;
 
     @Override
 	public void create () {
@@ -69,19 +74,38 @@ public class SanityType extends ApplicationAdapter {
 		String[] FL_verbs = Gdx.files.internal("4L_verbs.txt").readString().split(",");
 		fourLetter_verbs.addAll(FL_verbs);
 
-        spawnerTask = Timer.schedule(new Timer.Task() {
-            @Override
-            public void run() {
-                words.addActor(new WordSprite());
-            }
-        }, 0, speed);
-
         field = new TextField("", new Skin(Gdx.files.internal("ui/uiskin.json")));
         field.setPosition(0, 0);
         field.setSize(Gdx.graphics.getWidth(), 50);
         field.setAlignment(Align.center);
         input.addActor(field);
 
+        // Load all the levels.
+        levels = new Array<Level>();
+        try {
+            XmlReader reader = new XmlReader();
+            XmlReader.Element root = reader.parse(Gdx.files.internal("stages.xml"));
+            Array<XmlReader.Element> stages = root.getChildrenByName("stage");
+            int x = 1;
+            for(XmlReader.Element child : stages) {
+                log(child.getName());
+                Level level = new Level();
+                level.setCode(child.get("level_code"));
+                level.setDifficulty(child.getInt("difficulty"));
+                level.setMinSpeed(child.getFloat("minimumSpeed"));
+                level.setMaxSpeed(child.getFloat("maximumSpeed"));
+                level.setHasBoss(child.getBoolean("hasBoss"));
+                level.setPassingScore(child.getInt("passingScore"));
+                level.setWordFallSpeed(child.getFloat("wordFallSpeed"));
+                level.setQuickCode(x + "");
+                levels.add(level);
+                x++;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        setLevel(0);
         Gdx.input.setInputProcessor(input);
 
 	}
@@ -90,7 +114,21 @@ public class SanityType extends ApplicationAdapter {
 	public void render () {
 		Gdx.gl.glClearColor(0, 0, 0, 1);
 		Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        if(active == null) {
+            Gdx.graphics.setTitle(Gdx.graphics.getFramesPerSecond() + " " + Gdx.input.getX() + " , " + Gdx.input.getY() + " (!Loading Level!)");
+            return;
+        }
         Gdx.graphics.setTitle(Gdx.graphics.getFramesPerSecond() + " " + Gdx.input.getX() + " , " + Gdx.input.getY());
+
+        // Add words based on timer.
+        timer += Gdx.graphics.getDeltaTime();
+        if(timer >= speed) {
+            addWordSprite();
+            timer = 0;
+        }
+
+        if(active.isPassable())
+            advanceLevel();
 
         words.act();
         words.draw();
@@ -100,8 +138,9 @@ public class SanityType extends ApplicationAdapter {
 
         batch.begin();
         font.draw(batch, "Score: " + score.intValue(), 5, 585);
-        font.draw(batch, "Multiplier: " + multipler, 5, 565);
+        font.draw(batch, "Multiplier: " + multiplier, 5, 565);
         font.draw(batch, "Speed: " + speed, 5, 545);
+        font.draw(batch, "Level: " + active.getQuickCode(), 5, 525);
         if(words.getActors().size > 0)
             focus = (WordSprite) words.getActors().first();
         else
@@ -133,10 +172,13 @@ public class SanityType extends ApplicationAdapter {
                 if(checkFocus(length - 1)) {
                     focus.destroy();
                     addScore(250);
-                    multipler += 0.5;
+                    multiplier += 0.5;
                 }
             }
         }
+
+        if(Gdx.input.isKeyPressed(Input.Keys.ESCAPE))
+            Gdx.app.exit();
 
         world.step(1/60f, 6, 2);
 
@@ -147,8 +189,8 @@ public class SanityType extends ApplicationAdapter {
         char[] field_chr = field.getText().toCharArray();
         if(f_chr[index] != field_chr[index]) {
             removeScore(100);
-            multipler = 1;
-            speedUp(0.1f);
+            multiplier = 1;
+            incSpeed(0.05f);
         }
     }
 
@@ -165,7 +207,7 @@ public class SanityType extends ApplicationAdapter {
     }
 
     public void addScore(int value) {
-        double result = (value * multipler);
+        double result = (value * multiplier) * active.getDifficulty();
         score = score.add(BigInteger.valueOf((long) result));
     }
 
@@ -173,15 +215,25 @@ public class SanityType extends ApplicationAdapter {
         score = score.subtract(BigInteger.valueOf(value));
     }
 
-    public void speedUp(float speed) {
+    public void incSpeed(float speed) {
         this.speed -= speed;
-        spawnerTask.cancel();
-        spawnerTask = Timer.schedule(new Timer.Task() {
-            @Override
-            public void run() {
-                addWordSprite();
-            }
-        }, 0, speed);
+    }
+
+    public Level getLevel(String id) {
+        for(Level level : levels)
+            if(level.getCode().equals(id))
+                return level;
+        return null;
+    }
+
+    public void setLevel(int index) {
+        if(index < levels.size)
+            this.active = levels.get(index);
+    }
+
+    public void advanceLevel() {
+        if(level_index < levels.size)
+            this.active = levels.get(level_index + 1);
     }
 
 	public void log(String message) {
@@ -212,7 +264,10 @@ public class SanityType extends ApplicationAdapter {
             body.createFixture(textbox, 0.0f);
             textbox.dispose();
 
-            body.setLinearVelocity(0, -0.5f * PPE);
+            if(active == null)
+                body.setLinearVelocity(0, -0.5f * PPE);
+            else
+                body.setLinearVelocity(0, -(active.getWordFallSpeed()) * PPE);
 		}
 
         @Override
@@ -231,4 +286,84 @@ public class SanityType extends ApplicationAdapter {
             remove();
         }
     }
+
+    public class Level {
+        private String quickCode;
+        private String code;
+        private int difficulty;
+        private float minSpeed;
+        private float maxSpeed;
+        private boolean hasBoss;
+        private BigInteger passingScore;
+        private float wordFallSpeed;
+
+        public String getQuickCode() {
+            return quickCode;
+        }
+
+        public void setQuickCode(String quickCode) {
+            this.quickCode = quickCode;
+        }
+
+        public String getCode() {
+            return code;
+        }
+
+        public void setCode(String code) {
+            this.code = code;
+        }
+
+        public int getDifficulty() {
+            return difficulty;
+        }
+
+        public void setDifficulty(int difficulty) {
+            this.difficulty = difficulty;
+        }
+
+        public float getMinSpeed() {
+            return minSpeed;
+        }
+
+        public void setMinSpeed(float minSpeed) {
+            this.minSpeed = minSpeed;
+        }
+
+        public float getMaxSpeed() {
+            return maxSpeed;
+        }
+
+        public void setMaxSpeed(float maxSpeed) {
+            this.maxSpeed = maxSpeed;
+        }
+
+        public boolean isHasBoss() {
+            return hasBoss;
+        }
+
+        public void setHasBoss(boolean hasBoss) {
+            this.hasBoss = hasBoss;
+        }
+
+        public BigInteger getPassingScore() {
+            return passingScore;
+        }
+
+        public void setPassingScore(int passingScore) {
+            this.passingScore = BigInteger.valueOf(passingScore);
+        }
+
+        public float getWordFallSpeed() {
+            return wordFallSpeed;
+        }
+
+        public void setWordFallSpeed(float wordFallSpeed) {
+            this.wordFallSpeed = wordFallSpeed;
+        }
+
+        public boolean isPassable() {
+            return score.intValue() > passingScore.intValue();
+        }
+    }
+
 }
