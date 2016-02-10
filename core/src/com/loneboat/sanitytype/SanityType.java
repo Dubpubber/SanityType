@@ -514,7 +514,5 @@ public class SanityType extends Game {
                     levelCodeSpawned = true;
                 }
         }
-
     }
-
 }
