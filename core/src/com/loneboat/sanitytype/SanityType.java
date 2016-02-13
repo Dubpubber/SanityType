@@ -41,7 +41,12 @@ public class SanityType extends Game {
 	SpriteBatch batch;
 	BitmapFont font;
 
-	private Array<String> fourLetter_verbs;
+    private Array<Array<String>> chooser;
+
+	private Array<String> oneSyllableVerbs;
+	private Array<String> twoSyllableVerbs;
+	private Array<String> threeSyllableVerbs;
+	private Array<String> fourSyllableVerbs;
 
     private int level_index;
     private Level active;
@@ -86,9 +91,28 @@ public class SanityType extends Game {
 
         world = new World(new Vector2(0, 0), true);
 
-		fourLetter_verbs = new Array<String>();
-		String[] FL_verbs = Gdx.files.internal("4L_verbs.txt").readString().split(",");
-		fourLetter_verbs.addAll(FL_verbs);
+        chooser = new Array<>();
+
+		oneSyllableVerbs = new Array<>();
+		twoSyllableVerbs = new Array<>();
+		threeSyllableVerbs = new Array<>();
+		fourSyllableVerbs = new Array<>();
+
+		String[] words = Gdx.files.internal("1sylwords.txt").readString().split(",");
+        oneSyllableVerbs.addAll(words);
+        chooser.add(oneSyllableVerbs);
+
+        words = Gdx.files.internal("2sylwords.txt").readString().split(",");
+        twoSyllableVerbs.addAll(words);
+        chooser.add(twoSyllableVerbs);
+
+        words = Gdx.files.internal("3sylwords.txt").readString().split(",");
+        threeSyllableVerbs.addAll(words);
+        chooser.add(threeSyllableVerbs);
+
+        words = Gdx.files.internal("4sylwords.txt").readString().split(",");
+        fourSyllableVerbs.addAll(words);
+        chooser.add(fourSyllableVerbs);
 
         field = new TextField("", new Skin(Gdx.files.internal("ui/uiskin.json")));
         field.setPosition(0, 0);
@@ -130,6 +154,7 @@ public class SanityType extends Game {
 
         setLevel(0);
         Gdx.input.setInputProcessor(input);
+        input.setKeyboardFocus(field);
 	}
 
     public void createPauseUI() {
@@ -186,13 +211,6 @@ public class SanityType extends Game {
                     else
                         focus = addWordSprite();
 
-                    batch.begin();
-                    font.draw(batch, "Score: " + score.intValue(), 5, 585);
-                    font.draw(batch, "Multiplier: " + multiplier, 5, 565);
-                    font.draw(batch, "Speed: " + speed, 5, 545);
-                    font.draw(batch, "Level: " + active.getQuickCode(), 5, 525);
-                    batch.end();
-
                     if(focus != null) {
                         renderer.begin(ShapeRenderer.ShapeType.Filled);
                         renderer.setColor(getColorFromHeight(focus));
@@ -210,17 +228,28 @@ public class SanityType extends Game {
                                 focus.body.getPosition().y - (focus.text.height / 2),
                                 focus.text.height
                         );
+                        renderer.setColor(Color.GRAY);
+                        renderer.rect(0, Gdx.graphics.getHeight() - 30, Gdx.graphics.getWidth(), 30);
                         renderer.end();
                     }
+
+                    batch.begin();
+                    GlyphLayout gl = new GlyphLayout(font, "Total Score: " + score.intValue());
+                    font.draw(batch, gl, 5, 590);
+                    // formula: (value * multiplier) * active.getDifficulty()
+                    font.draw(batch,
+                            "[" + focus.getName().toUpperCase() + "]'s worth: (" + focus.getValue() + " * " + multiplier + ") * " + active.getDifficulty() + " = " + focus.getPossibleScore(),
+                            gl.width + 15, 590);
+                    batch.end();
 
                     if(Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)) {
                         int length = field.getText().length();
                         if(length > 0 && length <= focus.getName().length()) {
                             correctChar(length - 1);
                             if(checkFocus(length - 1)) {
-                                if(focus.getName().equalsIgnoreCase(field.getText())) {
+                                if(focus.getName().equalsIgnoreCase(field.getText().toLowerCase())) {
                                     focus.destroy();
-                                    addScore(250);
+                                    addScore();
                                     decSpeed(0.025f);
                                     active.clampSpeed();
                                     multiplier += 0.5;
@@ -255,6 +284,7 @@ public class SanityType extends Game {
                 if(Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
                     setState(GameState.RUN);
                     Gdx.input.setInputProcessor(input);
+                    input.setKeyboardFocus(field);
                 }
                 break;
             case RESUME:
@@ -270,7 +300,7 @@ public class SanityType extends Game {
     public void correctChar(int index) {
         char[] f_chr = focus.getName().toCharArray();
         char[] field_chr = field.getText().toCharArray();
-        if(f_chr[index] != field_chr[index]) {
+        if(Character.toLowerCase(f_chr[index]) != Character.toLowerCase(field_chr[index])) {
             removeScore(100);
             multiplier = 1;
             active.clampSpeed();
@@ -281,17 +311,18 @@ public class SanityType extends Game {
     public boolean checkFocus(int index) {
         char[] f_chr = focus.getName().toCharArray();
         char[] field_chr = field.getText().toCharArray();
-        return (f_chr[index] == field_chr[index]) && (f_chr.length == field_chr.length);
+        return (Character.toLowerCase(f_chr[index]) == Character.toLowerCase(field_chr[index])) && (f_chr.length == field_chr.length);
     }
 
     public WordSprite addWordSprite() {
         WordSprite ws = new WordSprite();
+        ws.setValue(1000);
         words.addActor(ws);
         return ws;
     }
 
-    public void addScore(int value) {
-        double result = (value * multiplier) * active.getDifficulty();
+    public void addScore() {
+        double result = (focus.getValue() * multiplier) * active.getDifficulty();
         score = score.add(BigInteger.valueOf((long) result));
     }
 
@@ -358,8 +389,10 @@ public class SanityType extends Game {
 
 		private GlyphLayout text;
 
+        private int value;
+
 		public WordSprite() {
-            setName(fourLetter_verbs.random());
+            setName(getWordBasedOnDifficulty());
 			text = new GlyphLayout(font, getName().toUpperCase());
 
             BodyDef bodyDef = new BodyDef();
@@ -422,6 +455,40 @@ public class SanityType extends Game {
             world.destroyBody(body);
             remove();
         }
+
+        public double getPossibleScore() {
+            return (value * multiplier) * active.getDifficulty();
+        }
+
+        public int getValue() {
+            return value;
+        }
+
+        public void setValue(int value) {
+            this.value = value;
+        }
+    }
+
+    public String getWordBasedOnDifficulty() {
+        if(active != null)
+            switch(active.getDifficulty()) {
+                case 1:
+                case 2:
+                case 3:
+                    return oneSyllableVerbs.random();
+                case 4:
+                case 5:
+                case 6:
+                    return chooser.get(MathUtils.random(0, 1)).random();
+                case 7:
+                case 8:
+                    return chooser.get(MathUtils.random(0, 2)).random();
+                case 9:
+                case 10:
+                default:
+                    return chooser.get(MathUtils.random(0, 3)).random();
+            }
+        return oneSyllableVerbs.random();
     }
 
     public class Level {
