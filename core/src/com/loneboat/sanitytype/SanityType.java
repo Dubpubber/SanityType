@@ -19,6 +19,7 @@ import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
@@ -66,7 +67,7 @@ public class SanityType extends Game {
     private float timer = 0;
     private float speed = 2;
 
-    private BigInteger score = BigInteger.valueOf(250001);
+    private BigInteger score = BigInteger.valueOf(0);
     private double multiplier = 1.0;
 
     private GameState gs;
@@ -153,6 +154,28 @@ public class SanityType extends Game {
         }, 0, 1);
 
         setLevel(0);
+
+        field.addListener(new InputListener() {
+            @Override
+            public boolean keyTyped(InputEvent event, char character) {
+                int length = field.getText().length();
+                if(length > 0 && length <= focus.getName().length()) {
+                    correctChar(length - 1);
+                    if(checkFocus(length - 1)) {
+                        if(focus.getName().equalsIgnoreCase(field.getText().toLowerCase())) {
+                            focus.destroy();
+                            addScore();
+                            decSpeed(0.025f);
+                            active.clampSpeed();
+                            multiplier += 0.5;
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+        });
+
         Gdx.input.setInputProcessor(input);
         input.setKeyboardFocus(field);
 	}
@@ -242,26 +265,14 @@ public class SanityType extends Game {
                             gl.width + 15, 590);
                     batch.end();
 
-                    if(Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)) {
-                        int length = field.getText().length();
-                        if(length > 0 && length <= focus.getName().length()) {
-                            correctChar(length - 1);
-                            if(checkFocus(length - 1)) {
-                                if(focus.getName().equalsIgnoreCase(field.getText().toLowerCase())) {
-                                    focus.destroy();
-                                    addScore();
-                                    decSpeed(0.025f);
-                                    active.clampSpeed();
-                                    multiplier += 0.5;
-                                }
-                            }
-                        }
-                    }
-
                     if(Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
                         setState(GameState.PAUSE);
                         Gdx.input.setInputProcessor(pauseStage);
                     }
+                }
+
+                if(Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                    field.setText("");
                 }
 
                 world.step(1/60f, 6, 2);
